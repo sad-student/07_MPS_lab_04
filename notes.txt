@@ -1,0 +1,3 @@
+Option 9
+
+CD = 0, 1010111 1 => lcd power on
