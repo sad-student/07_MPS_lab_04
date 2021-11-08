@@ -1,0 +1,5 @@
+Github simple SPI example
+https://gist.github.com/stu9458/fb6ad40d8429334633ae
+
+Detailed responses to SPI-related question
+https://stackoverflow.com/questions/24966501/every-spi-send-results-in-receiving-a-0-on-msp430
