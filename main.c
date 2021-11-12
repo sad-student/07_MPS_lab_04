@@ -1,5 +1,4 @@
 #include <msp430.h> 
-// #include “HAL_Dogs102x6.h”
 
 #define TAxCCR_05Hz 0xffff /* timer upper bound count value */
 #define BUTTON_DELAY 0x0500
