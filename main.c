@@ -3,7 +3,8 @@
 #define TAxCCR_05Hz 0xffff /* timer upper bound count value */
 #define BUTTON_DELAY 0x0500
 
-unsigned int counter = 0;
+int current_number = 3184;
+int current_adder = -591;
 
 unsigned short int button_halt = 0;
 
@@ -28,6 +29,8 @@ __interrupt void S2_handler(void){
 	if(P2IFG & BIT2){
 		if(~button_halt & BIT2){
 			if(P2IES & BIT2){
+				current_number += current_adder;
+				printNumber(current_number);
 
 				TA2CCR2 = TA2R + BUTTON_DELAY;
 				TA2CCTL2 = (TA2CCTL2 & (~0x010)) | CCIE;
@@ -55,6 +58,128 @@ __interrupt void TA2_handler(void){
 		default:
 			break;
 	}
+}
+
+void writeCommand(uint8_t *sCmd, uint8_t i) {
+    // Store current GIE state
+    uint16_t gie = __get_SR_register() & GIE;
+
+    // Make this operation atomic
+    __disable_interrupt();
+
+    // CS Low
+    P7OUT &= ~CS;
+
+    // CD Low
+    P5OUT &= ~CD;
+    while (i){
+        // USCI_B1 TX buffer ready?
+        while (!(UCB1IFG & UCTXIFG)) ;
+
+        // Transmit data
+        UCB1TXBUF = *sCmd;
+
+        // Increment the pointer on the array
+        sCmd++;
+
+        // Decrement the Byte counter
+        i--;
+    }
+
+    // Wait for all TX/RX to finish
+    while (UCB1STAT & UCBUSY) ;
+
+    // Dummy read to empty RX buffer and clear any overrun conditions
+    UCB1RXBUF;
+
+    // CS High
+    P7OUT |= CS;
+
+    // Restore original GIE state
+    __bis_SR_register(gie);
+}
+
+void writeData(uint8_t *sData, uint8_t i) {
+    // Store current GIE state
+    uint16_t gie = __get_SR_register() & GIE;
+
+    // Make this operation atomic
+    __disable_interrupt();
+
+    if (drawmode == DOGS102x6_DRAW_ON_REFRESH){
+      while (i){
+          dogs102x6Memory[2 + (currentPage * 102) + currentColumn] = (uint8_t)*sData++;
+          currentColumn++;
+
+          // Boundary check
+          if (currentColumn > 101){
+              currentColumn = 101;
+          }
+
+          // Decrement the Byte counter
+          i--;
+      }
+    }
+    else {
+      // CS Low
+      P7OUT &= ~CS;
+      //CD High
+      P5OUT |= CD;
+
+      while (i){
+          dogs102x6Memory[2 + (currentPage * 102) + currentColumn] = (uint8_t)*sData;
+          currentColumn++;
+
+          // Boundary check
+          if (currentColumn > 101){
+              currentColumn = 101;
+          }
+
+          // USCI_B1 TX buffer ready?
+          while (!(UCB1IFG & UCTXIFG)) ;
+
+          // Transmit data and increment pointer
+          UCB1TXBUF = *sData++;
+
+          // Decrement the Byte counter
+          i--;
+      }
+
+      // Wait for all TX/RX to finish
+      while (UCB1STAT & UCBUSY) ;
+
+      // Dummy read to empty RX buffer and clear any overrun conditions
+      UCB1RXBUF;
+
+      // CS High
+      P7OUT |= CS;
+    }
+
+    // Restore original GIE state
+    __bis_SR_register(gie);
+}
+
+#define SET_COLUMN_ADDRESS_MSB        0x10
+#define SET_COLUMN_ADDRESS_LSB        0x00
+#define SET_PAGE_ADDRESS              0xB0
+void setPosition(unsigned char page, unsigned char col){
+	unsigned char cmd[3] = {SET_COLUMN_ADDRESS_MSB, SET_COLUMN_ADDRESS_LSB, SET_PAGE_ADDRESS};
+	cmd[0] = (cmd[0] & (~0x0f)) | ((page >> 4) & (0x0f));
+	cmd[1] = (cmd[1] & (~0x0f)) | (page & 0x0f);
+	cmd[2] = (cmd[2] & (~0x0f)) | (col & 0x0f);
+	writeCommand(cmd, 3);
+}
+
+void printNumber(int num){
+	unsigned char current_page = 7;
+	unsigned char current_col = 0;
+}
+
+void printSymbol(int index, unsigned char page, unsigned int col){
+	setPosition(page-1, col);
+	writeData(_font[index], 6);
+	setPosition(page, col);
+	writeData(_font[index] + 6, 6);
 }
 
 int main(void) {
