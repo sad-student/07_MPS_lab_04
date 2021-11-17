@@ -246,7 +246,9 @@ int main(void) {
 	// CD Low for command
 	// P5OUT &= ~BIT6;
 	// Disable screen backlight
-	P7OUT |= BIT6;
+	P7OUT &= ~BIT6;
+//	P7OUT |= BIT6;
+
 
 	P7OUT |= BIT4;
 
@@ -296,15 +298,17 @@ int main(void) {
 	    SET_DISPLAY_ENABLE		// 12
 	};
 
-	// cmd[3] = (cmd[3] & (~0x01)) | BIT0;
-	cmd[3] = (cmd[3] & (~0x01)) | (~BIT0 & (0x01));
-	cmd[6] = (cmd[6] & (~0x01f)) | (0x0f & (0x01f));
+	cmd[1] = (cmd[1] & (~0x01)) | (BIT0 & 0x01);
+	cmd[2] = (cmd[2] & (~0x08)) | (BIT3 & 0x08);
+	cmd[3] = (cmd[3] & (~0x01)) | BIT0;
+	//cmd[3] = (cmd[3] & (~0x01)) | (~BIT0 & (0x01));
+	cmd[6] = (cmd[6] & (~0x03f)) | (0x01f & (0x03f));
 	cmd[7] = (cmd[7] & (~0x07)) | ((BIT0 | BIT1 | BIT2) & (0x07));
 	cmd[8] = (cmd[8] & (~0x07)) | (0x4 & (0x07));
 	cmd[11] = (cmd[11] & (~0x083)) | ((BIT7) & (0x83));
 	cmd[12] = (cmd[12] & (~0x01)) | BIT0;
 
-	writeCommand(cmd, 13);
+	writeCommand(cmd, sizeof(cmd));
 
 //	unsigned char reset_command = SYSTEM_RESET;
 //	writeCommand(&reset_command, 1);
@@ -319,7 +323,9 @@ int main(void) {
 
 	printNumber(current_number);
 
-//	cmd[3] = (cmd[3] & (~0x01)) | (~BIT0 & (0x01));
-//	writeCommand(cmd + 3, 1);
+	cmd[3] = (cmd[3] & (~0x01)) | (~BIT0 & (0x01));
+//	unsigned char _temp[] = { SET_ALL_PIXEL_ON };
+//	_temp[0] = (_temp[0] & (~0x01)) | (~BIT0 & (0x01));
+	writeCommand(cmd + 3, 1);
 	return 0;
 }
