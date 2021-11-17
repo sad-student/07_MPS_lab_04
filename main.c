@@ -2,7 +2,7 @@
 #include "font.h"
 
 #define TAxCCR_05Hz 0xffff /* timer upper bound count value */
-#define BUTTON_DELAY 0x0500
+#define BUTTON_DELAY 0x0300
 
 int current_number = 3184;
 int current_adder = -591;
@@ -10,27 +10,35 @@ int current_adder = -591;
 unsigned short int button_halt = 0;
 unsigned short int screen_state = 0;
 
+unsigned int glitch_counters[] = { 0, 0 };
+
 void writeCommand(unsigned char *sCmd, unsigned char i);
 void writeData(unsigned char *sData, unsigned char i);
 void setPosition(unsigned char page, unsigned char col);
 void printNumber(int num);
 void printSymbol(int index, unsigned char page, unsigned int col);
 
-#define SET_INVERSE_DISPLAY           0xA6
+#define SET_INVERSE_DISPLAY		0xA6
 #pragma vector = PORT1_VECTOR
 __interrupt void S1_handler(void){
 	if(P1IFG & BIT7){
-		if (~button_halt & BIT7){
+//		if (~button_halt & BIT7){
+		if (glitch_counters[0] == 0){
 			if(P1IES & BIT7){
 				current_number += current_adder;
 				printNumber(current_number);
 
-				TA2CCR1 = TA2R + BUTTON_DELAY;
-				TA2CCTL1 = (TA2CCTL1 & (~0x010)) | CCIE;
-				button_halt |= BIT7;
+//				TA2CCR1 = TA2R + BUTTON_DELAY;
+//				TA2CCTL1 = (TA2CCTL1 & (~0x010)) | CCIE;
+//				button_halt |= BIT7;
 			}
 			P1IES ^= BIT7;
 		}
+
+		++glitch_counters[0];
+		TA2CCR1 = TA2R + BUTTON_DELAY;
+		TA2CCTL1 = (TA2CCTL1 & (~0x010)) | CCIE;
+
 		P1IFG &= ~BIT7;
 	}
 }
@@ -38,7 +46,9 @@ __interrupt void S1_handler(void){
 #pragma vector = PORT2_VECTOR
 __interrupt void S2_handler(void){
 	if(P2IFG & BIT2){
-		if(~button_halt & BIT2){
+//		if(~button_halt & BIT2){
+		if(glitch_counters[1] == 0){
+
 			if(P2IES & BIT2){
 				unsigned char cmd[1] = {SET_INVERSE_DISPLAY};
 				cmd[0] = (cmd[0] & (~0x01)) | (screen_state & 0x01);
@@ -46,12 +56,17 @@ __interrupt void S2_handler(void){
 
 				screen_state ^= BIT0;
 
-				TA2CCR2 = TA2R + BUTTON_DELAY;
-				TA2CCTL2 = (TA2CCTL2 & (~0x010)) | CCIE;
-				button_halt |= BIT2;
+//				TA2CCR2 = TA2R + BUTTON_DELAY;
+//				TA2CCTL2 = (TA2CCTL2 & (~0x010)) | CCIE;
+//				button_halt |= BIT2;
 			}
 			P2IES ^= BIT2;
 		}
+
+		++glitch_counters[1];
+		TA2CCR2 = TA2R + BUTTON_DELAY;
+		TA2CCTL2 = (TA2CCTL2 & (~0x010)) | CCIE;
+
 		P2IFG &= ~BIT2;
 	}
 }
@@ -61,12 +76,14 @@ __interrupt void TA2_handler(void){
 	switch(TA2IV){
 		case TA2IV_TACCR1:
 			// S1
-			button_halt &= ~BIT7;
+//			button_halt &= ~BIT7;
+			glitch_counters[0] = 0;
 			TA2CCTL1 = (TA2CCTL1 & (~0x010)) | (~CCIE & (0x010)); // & ~CCIE;
 			break;
 		case TA2IV_TACCR2:
 			// S2
-			button_halt &= ~BIT2;
+//			button_halt &= ~BIT2;
+			glitch_counters[1] = 0;
 			TA2CCTL2 = (TA2CCTL2 & (~0x010)) | (~CCIE & (0x010)); // & ~CCIE;
 			break;
 		default:
@@ -134,9 +151,9 @@ void writeData(unsigned char *sData, unsigned char i) {
     __bis_SR_register(gie);
 }
 
-#define SET_COLUMN_ADDRESS_MSB        0x10
-#define SET_COLUMN_ADDRESS_LSB        0x00
-#define SET_PAGE_ADDRESS              0xB0
+#define SET_COLUMN_ADDRESS_MSB		0x10
+#define SET_COLUMN_ADDRESS_LSB		0x00
+#define SET_PAGE_ADDRESS			0xB0
 void setPosition(unsigned char page, unsigned char col){
 	unsigned char cmd[3] = {SET_COLUMN_ADDRESS_MSB, SET_COLUMN_ADDRESS_LSB, SET_PAGE_ADDRESS};
 	cmd[0] = (cmd[0] & (~0x0f)) | ((col >> 4) & (0x0f));
@@ -221,15 +238,12 @@ int main(void) {
 
 
 	// LCD and UART initialization
-
 	// Chip select and screen backlight
 	P7SEL &= ~(BIT4 | BIT6);
-//	P7SEL |= (BIT4 | BIT6);
 	P7DIR |= (BIT4 | BIT6);
 
 	// Reset and Command/Data
 	P5SEL &= ~(BIT6 | BIT7);
-//	P5SEL |= (BIT6 | BIT7);
 	P5DIR |= (BIT6 | BIT7);
 
 	// Option select SIMO and select CLK
@@ -243,12 +257,9 @@ int main(void) {
 	P5OUT &= BIT7;
 	// Reset is active low
 	P5OUT |= BIT7;
-	// CD Low for command
-	// P5OUT &= ~BIT6;
 	// Disable screen backlight
 	P7OUT &= ~BIT6;
 //	P7OUT |= BIT6;
-
 
 	P7OUT |= BIT4;
 
@@ -301,8 +312,7 @@ int main(void) {
 	cmd[1] = (cmd[1] & (~0x01)) | (BIT0 & 0x01);
 	cmd[2] = (cmd[2] & (~0x08)) | (BIT3 & 0x08);
 	cmd[3] = (cmd[3] & (~0x01)) | BIT0;
-	//cmd[3] = (cmd[3] & (~0x01)) | (~BIT0 & (0x01));
-	cmd[6] = (cmd[6] & (~0x03f)) | (0x01f & (0x03f));
+	cmd[6] = (cmd[6] & (~0x03f)) | (0x030 & (0x03f));
 	cmd[7] = (cmd[7] & (~0x07)) | ((BIT0 | BIT1 | BIT2) & (0x07));
 	cmd[8] = (cmd[8] & (~0x07)) | (0x4 & (0x07));
 	cmd[11] = (cmd[11] & (~0x083)) | ((BIT7) & (0x83));
@@ -324,8 +334,6 @@ int main(void) {
 	printNumber(current_number);
 
 	cmd[3] = (cmd[3] & (~0x01)) | (~BIT0 & (0x01));
-//	unsigned char _temp[] = { SET_ALL_PIXEL_ON };
-//	_temp[0] = (_temp[0] & (~0x01)) | (~BIT0 & (0x01));
 	writeCommand(cmd + 3, 1);
 	return 0;
 }
